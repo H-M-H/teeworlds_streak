@@ -19,6 +19,7 @@ public:
     void OnPlayerInfoChange(class CPlayer *pP);
     void OnCharacterSpawn(class CCharacter *pChr);
     int OnCharacterDeath(class CCharacter *pVictim, class CPlayer *pKiller, int Weapon);
+    void DoWincheck();
     void LevelUp(CPlayer *pP, bool Game = false);
     void LevelDown(CPlayer *pP, bool Game = false);
 

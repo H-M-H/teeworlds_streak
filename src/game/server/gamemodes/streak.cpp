@@ -263,6 +263,59 @@ int CGameControllerStreak::OnCharacterDeath(class CCharacter *pVictim, class CPl
     return 0;
 }
 
+void CGameControllerStreak::DoWincheck()
+{
+    if(m_GameOverTick == -1 && !m_Warmup && !GameServer()->m_World.m_ResetRequested)
+    {
+        // gather some stats
+        int Topscore = 0;
+        int TopscoreCount = 0;
+        int LevelEndReached = -1;
+        int TopScorePlayer = -1;
+        for(int i = 0; i < MAX_CLIENTS; i++)
+        {
+            if(GameServer()->m_apPlayers[i])
+            {
+                if(GameServer()->m_apPlayers[i]->m_Score > Topscore)
+                {
+                    Topscore = GameServer()->m_apPlayers[i]->m_Score;
+                    TopscoreCount = 1;
+                    TopScorePlayer = i;
+                }
+                else if(GameServer()->m_apPlayers[i]->m_Score == Topscore)
+                    TopscoreCount++;
+
+                if(GameServer()->m_apPlayers[i]->m_Level >= m_MaxSensfulLevel && GameServer()->m_apPlayers[i]->m_Streak >= g_Config.m_SvStreakLen && g_Config.m_SvEndOnLevel)
+                    LevelEndReached = i;
+            }
+        }
+
+        // check score win condition
+        if((g_Config.m_SvScorelimit > 0 && Topscore >= g_Config.m_SvScorelimit) ||
+            (g_Config.m_SvTimelimit > 0 && (Server()->Tick()-m_RoundStartTick) >= g_Config.m_SvTimelimit*Server()->TickSpeed()*60))
+        {
+            if(TopscoreCount == 1)
+            {
+                char aBuf[256];
+                str_format(aBuf, sizeof(aBuf), "'%s' wins this round !", Server()->ClientName(TopScorePlayer));
+                GameServer()->SendChat(-1, CGameContext::CHAT_ALL, aBuf);
+                GameServer()->Console()->Print(IConsole::OUTPUT_LEVEL_ADDINFO, "chat", aBuf);
+                EndRound();
+            }
+            else
+                m_SuddenDeath = 1;
+        }
+        else if(LevelEndReached != -1)
+        {
+            char aBuf[256];
+            str_format(aBuf, sizeof(aBuf), "'%s' wins this round !", Server()->ClientName(LevelEndReached));
+            GameServer()->SendChat(-1, CGameContext::CHAT_ALL, aBuf);
+            GameServer()->Console()->Print(IConsole::OUTPUT_LEVEL_ADDINFO, "chat", aBuf);
+            EndRound();
+        }
+    }
+}
+
 void CGameControllerStreak::LevelUp(class CPlayer* pP, bool Game)
 {
     if(pP->m_Level == m_MaxSensfulLevel)
