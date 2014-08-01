@@ -29,7 +29,10 @@ CGameControllerStreak::CGameControllerStreak(class CGameContext *pGameServer)
     }
 
     for(int i = 0; i < 5; i++)
+    {
         m_Spawntypes[i] = false;
+        m_ArenaPlayerNum[i] = 0;
+    }
     m_MaxLevels = 0;
     m_MaxSensfulLevel = 1;
 }
@@ -51,13 +54,20 @@ void CGameControllerStreak::Tick()
 
     ChangeSubMode(SubMode);
 
-
+    for(int i = 0; i < 5; i++)
+        m_ArenaPlayerNum[i] = 0;
 
     int NumPlayersPlaying = 0;
     for(int i = 0; i < MAX_CLIENTS; i++)
     {
         if(GameServer()->m_apPlayers[i] && GameServer()->m_apPlayers[i]->GetTeam() != TEAM_SPECTATORS)
+        {
             NumPlayersPlaying++;
+
+            int Arena = GetWantedArena(GameServer()->m_apPlayers[i]->m_Level);
+            m_ArenaPlayerNum[Arena]++;
+            GameServer()->m_apPlayers[i]->m_WantedArena = Arena;
+        }
     }
     m_MaxSensfulLevel = clamp((NumPlayersPlaying+1)/2, 1, m_MaxLevels);
 
@@ -69,11 +79,17 @@ void CGameControllerStreak::Tick()
                 LevelDown(GameServer()->m_apPlayers[i], true);
             else if(GameServer()->m_apPlayers[i]->m_Level < m_MaxSensfulLevel && GameServer()->m_apPlayers[i]->m_Streak >= g_Config.m_SvStreakLen)
                 LevelUp(GameServer()->m_apPlayers[i], true);
+
+            if((GameServer()->m_apPlayers[i]->m_Arena != GameServer()->m_apPlayers[i]->m_WantedArena && m_ArenaPlayerNum[GameServer()->m_apPlayers[i]->m_WantedArena] > 1) ||
+                    (GameServer()->m_apPlayers[i]->m_Arena == GameServer()->m_apPlayers[i]->m_WantedArena && m_ArenaPlayerNum[GameServer()->m_apPlayers[i]->m_WantedArena] <= 1 && GameServer()->m_apPlayers[i]->m_WantedArena != GetWantedArena(1)))
+            {
+                GameServer()->m_apPlayers[i]->GetCharacter()->ForceRespawn();
+            }
         }
     }
 }
 
-bool CGameControllerStreak::CanSpawn(int Team, vec2 *pOutPos, int Level)
+bool CGameControllerStreak::CanSpawn(int Team, vec2 *pOutPos, int Level, int ID)
 {
     CSpawnEval Eval;
 
@@ -81,18 +97,19 @@ bool CGameControllerStreak::CanSpawn(int Team, vec2 *pOutPos, int Level)
     if(Team == TEAM_SPECTATORS)
         return false;
 
-     int SpawnType = -1;
-     int Num = 0;
-
-     while(Num != Level && SpawnType < m_MaxLevels)
-     {
-         SpawnType++;
-         if(m_Spawntypes[SpawnType])
-             Num++;
-     }
-
-     EvaluateSpawnType(&Eval, SpawnType);
-
+    int Arena = GetWantedArena(Level);
+    if(m_ArenaPlayerNum[Arena] > 1)
+    {
+        EvaluateSpawnType(&Eval, Arena);
+        if(Eval.m_Got)
+                GameServer()->m_apPlayers[ID]->m_Arena = Arena;
+    }
+    else
+    {
+        EvaluateSpawnType(&Eval, GetWantedArena(1));
+        if(Eval.m_Got)
+            GameServer()->m_apPlayers[ID]->m_Arena = GetWantedArena(1);
+    }
 
     *pOutPos = Eval.m_Pos;
     return Eval.m_Got;
@@ -235,7 +252,7 @@ void CGameControllerStreak::OnCharacterSpawn(class CCharacter *pChr)
 int CGameControllerStreak::OnCharacterDeath(class CCharacter *pVictim, class CPlayer *pKiller, int Weapon)
 {
     // level down for Victim
-    if(Weapon != WEAPON_GAME)
+    if(Weapon != WEAPON_GAME && pVictim->GetPlayer()->m_Arena == pVictim->GetPlayer()->m_WantedArena)
         LevelDown(pVictim->GetPlayer());
 
     // do scoreing
@@ -252,8 +269,14 @@ int CGameControllerStreak::OnCharacterDeath(class CCharacter *pVictim, class CPl
             pKiller->m_Score--; // teamkill
         else
         {
-            pKiller->m_Score += pKiller->m_Level; // normal kill
-            pKiller->m_Streak++;
+            if(pKiller->m_Arena == pKiller->m_WantedArena)
+            {
+                pKiller->m_Score += pKiller->m_Level; // normal kill
+                pKiller->m_Streak++;
+            }
+            else
+                pKiller->m_Score++; // don't give waiting players such a huge advantage
+
             if(pKiller->m_Level < m_MaxSensfulLevel && pKiller->m_Streak >= g_Config.m_SvStreakLen)
                 LevelUp(pKiller);
         }
@@ -338,7 +361,7 @@ void CGameControllerStreak::LevelUp(class CPlayer* pP, bool Game)
     }
 
 
-    if(pP->GetCharacter())
+    if(pP->GetCharacter() && m_ArenaPlayerNum[GetWantedArena(pP->m_Level)])
         pP->GetCharacter()->ForceRespawn();
     OnPlayerInfoChange(pP);
 }
@@ -456,4 +479,18 @@ void CGameControllerStreak::AdjustLivesAll()
             GameServer()->m_apPlayers[i]->GetCharacter()->IncreaseArmor(-10);
         }
     }
+}
+
+int CGameControllerStreak::GetWantedArena(int Level)
+{
+    int SpawnType = -1;
+    int Num = 0;
+
+    while(Num != Level && SpawnType < m_MaxLevels)
+    {
+        SpawnType++;
+        if(m_Spawntypes[SpawnType])
+            Num++;
+    }
+    return SpawnType;
 }

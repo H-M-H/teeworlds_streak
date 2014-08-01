@@ -130,7 +130,7 @@ public:
 	virtual void OnPlayerInfoChange(class CPlayer *pP);
 
 	//
-    virtual bool CanSpawn(int Team, vec2 *pPos, int Level = 1);
+    virtual bool CanSpawn(int Team, vec2 *pPos, int Level, int ID);
 
 	/*
 

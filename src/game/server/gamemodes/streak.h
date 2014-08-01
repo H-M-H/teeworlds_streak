@@ -5,6 +5,8 @@ class CGameControllerStreak : public IGameController
 {
     // store which spawntypes are used (normal, red, blue, yellow, green)
     bool m_Spawntypes[5];
+    // the arenas the players belong to by their level / wanted arenas
+    int m_ArenaPlayerNum[5];
     // maximum level that can be reached on map
     int m_MaxLevels;
     // this depends on playernumber so there is always someone to fight against
@@ -13,7 +15,7 @@ class CGameControllerStreak : public IGameController
 public:
     CGameControllerStreak(class CGameContext *pGameServer);
     void Tick();
-    bool CanSpawn(int Team, vec2 *pOutPos, int Level);
+    bool CanSpawn(int Team, vec2 *pOutPos, int Level, int ID);
     bool OnEntity(int Index, vec2 Pos);
     void PostReset();
     void OnPlayerInfoChange(class CPlayer *pP);
@@ -35,6 +37,7 @@ public:
     void SetWeaponsAll(int Weapon, int Ammo);
     void RemoveAllPickups();
     void AdjustLivesAll();
+    int GetWantedArena(int Level);
 
     // getters
     int GetMaxLevel() { return m_MaxLevels; }

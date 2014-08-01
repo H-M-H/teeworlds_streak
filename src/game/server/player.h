@@ -98,6 +98,8 @@ public:
 
     int m_Level;
     int m_Streak;
+    int m_Arena;
+    int m_WantedArena;
 
 private:
 	CCharacter *m_pCharacter;
