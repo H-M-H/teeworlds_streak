@@ -252,7 +252,7 @@ void CGameControllerStreak::OnCharacterSpawn(class CCharacter *pChr)
 int CGameControllerStreak::OnCharacterDeath(class CCharacter *pVictim, class CPlayer *pKiller, int Weapon)
 {
     // level down for Victim
-    if(Weapon != WEAPON_GAME && pVictim->GetPlayer()->m_Arena == pVictim->GetPlayer()->m_WantedArena)
+    if(Weapon != WEAPON_GAME && (pVictim->GetPlayer()->m_Arena == pVictim->GetPlayer()->m_WantedArena || pKiller == pVictim->GetPlayer()))
         LevelDown(pVictim->GetPlayer());
 
     // do scoreing
@@ -361,7 +361,7 @@ void CGameControllerStreak::LevelUp(class CPlayer* pP, bool Game)
     }
 
 
-    if(pP->GetCharacter() && m_ArenaPlayerNum[GetWantedArena(pP->m_Level)])
+    if(pP->GetCharacter())
         pP->GetCharacter()->ForceRespawn();
     OnPlayerInfoChange(pP);
 }
