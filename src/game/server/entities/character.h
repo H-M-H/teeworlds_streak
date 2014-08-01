@@ -48,6 +48,7 @@ public:
 	void FireWeapon();
 
 	void Die(int Killer, int Weapon);
+    void ForceRespawn();
 	bool TakeDamage(vec2 Force, int Dmg, int From, int Weapon);
 
 	bool Spawn(class CPlayer *pPlayer, vec2 Pos);
@@ -57,6 +58,7 @@ public:
 	bool IncreaseArmor(int Amount);
 
 	bool GiveWeapon(int Weapon, int Ammo);
+    void RemoveWeapon(int Weapon);
 	void GiveNinja();
 
 	void SetEmote(int Emote, int Tick);

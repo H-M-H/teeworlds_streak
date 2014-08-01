@@ -12,6 +12,7 @@
 #include "gamemodes/dm.h"
 #include "gamemodes/tdm.h"
 #include "gamemodes/ctf.h"
+#include "gamemodes/streak.h"
 #include "gamemodes/mod.h"
 
 enum
@@ -652,7 +653,64 @@ void CGameContext::OnMessage(int MsgID, CUnpacker *pUnpacker, int ClientID)
 
 			pPlayer->m_LastChat = Server()->Tick();
 
-			SendChat(ClientID, Team, pMsg->m_pMessage);
+            if(str_comp(m_pController->m_pGameType, "Streak") == 0 || str_comp(m_pController->m_pGameType, "gStreak") == 0 || str_comp(m_pController->m_pGameType, "iStreak") == 0)
+            {
+                if(str_comp_nocase(pMsg->m_pMessage, "/help") == 0)
+                {
+                    SendChatTarget(ClientID, "–––––");
+                    SendChatTarget(ClientID, "Kill as much Tees as you can !");
+                    SendChatTarget(ClientID, "For detailed info type '/info' and for the command-list '/cmdlist'");
+                }
+                else if(str_comp_nocase(pMsg->m_pMessage, "/info") == 0)
+                {
+                    SendChatTarget(ClientID, "–––––");
+
+                    char aBuf[256];
+                    str_format(aBuf, sizeof(aBuf), "If you kill %d Tees in a Streak you achieve the next Level.", g_Config.m_SvStreakLen);
+                    SendChatTarget(ClientID, aBuf);
+
+                    SendChatTarget(ClientID, "The higher your Level the more score you get for Kills. The score you get is equal to your Level");
+
+                    SendChatTarget(ClientID, "Each Level has its own spawnpoints, so Tees from different Levels can be seperated.");
+                }
+                else if(str_comp_nocase(pMsg->m_pMessage, "/gameinfo") == 0)
+                {
+                    SendChatTarget(ClientID, "–––––");
+
+                    char aBuf[256];
+                    str_format(aBuf, sizeof(aBuf), "The highest Level that can be reached on this Map is %d.", ((CGameControllerStreak*)m_pController)->GetMaxLevel());
+                    SendChatTarget(ClientID, aBuf);
+
+                    str_format(aBuf, sizeof(aBuf), "The highest Level that can be reached currently is %d.", ((CGameControllerStreak*)m_pController)->GetMaxSensfulLevel());
+                    SendChatTarget(ClientID, aBuf);
+
+                    str_format(aBuf, sizeof(aBuf), "Your Level is %d.", pPlayer->m_Level);
+                    SendChatTarget(ClientID, aBuf);
+
+                    str_format(aBuf, sizeof(aBuf), "Your current Kill-Streak is %d.", pPlayer->m_Streak);
+                    SendChatTarget(ClientID, aBuf);
+
+                }
+                else if(str_comp_nocase(pMsg->m_pMessage, "/credits") == 0)
+                {
+                    SendChatTarget(ClientID, "–––––");
+                    SendChatTarget(ClientID, "This modification is developed by HMH");
+                    SendChatTarget(ClientID, "Ideas and Inspiration by Kapla and HMH");
+                }
+                else if(str_comp_nocase(pMsg->m_pMessage, "/cmdlist") == 0)
+                {
+                    SendChatTarget(ClientID, "–––––");
+                    SendChatTarget(ClientID, "/help - help");
+                    SendChatTarget(ClientID, "/info - information about this gametype");
+                    SendChatTarget(ClientID, "/gameinfo - information about the current map, your Level and Kill-Streak");
+                    SendChatTarget(ClientID, "/credits - credits");
+                    SendChatTarget(ClientID, "/cmdlist - list of commands");
+                }
+                else
+                    SendChat(ClientID, Team, pMsg->m_pMessage);
+            }
+            else
+                SendChat(ClientID, Team, pMsg->m_pMessage);
 		}
 		else if(MsgID == NETMSGTYPE_CL_CALLVOTE)
 		{
@@ -1499,6 +1557,12 @@ void CGameContext::OnInit(/*class IKernel *pKernel*/)
 		m_pController = new CGameControllerCTF(this);
 	else if(str_comp(g_Config.m_SvGametype, "tdm") == 0)
 		m_pController = new CGameControllerTDM(this);
+    else if(str_comp_nocase(g_Config.m_SvGametype, "Streak") == 0)
+        m_pController = new CGameControllerStreak(this);
+    else if(str_comp_nocase(g_Config.m_SvGametype, "gStreak") == 0)
+        m_pController = new CGameControllerStreak(this);
+    else if(str_comp_nocase(g_Config.m_SvGametype, "iStreak") == 0)
+        m_pController = new CGameControllerStreak(this);
 	else
 		m_pController = new CGameControllerDM(this);
 
@@ -1506,32 +1570,7 @@ void CGameContext::OnInit(/*class IKernel *pKernel*/)
 	//for(int i = 0; i < MAX_CLIENTS; i++)
 	//	game.players[i].core.world = &game.world.core;
 
-	// create all entities from the game layer
-	CMapItemLayerTilemap *pTileMap = m_Layers.GameLayer();
-	CTile *pTiles = (CTile *)Kernel()->RequestInterface<IMap>()->GetData(pTileMap->m_Data);
-
-
-
-
-	/*
-	num_spawn_points[0] = 0;
-	num_spawn_points[1] = 0;
-	num_spawn_points[2] = 0;
-	*/
-
-	for(int y = 0; y < pTileMap->m_Height; y++)
-	{
-		for(int x = 0; x < pTileMap->m_Width; x++)
-		{
-			int Index = pTiles[y*pTileMap->m_Width+x].m_Index;
-
-			if(Index >= ENTITY_OFFSET)
-			{
-				vec2 Pos(x*32.0f+16.0f, y*32.0f+16.0f);
-				m_pController->OnEntity(Index-ENTITY_OFFSET, Pos);
-			}
-		}
-	}
+    InitEntities();
 
 	//game.world.insert_entity(game.Controller);
 
@@ -1544,6 +1583,41 @@ void CGameContext::OnInit(/*class IKernel *pKernel*/)
 		}
 	}
 #endif
+}
+
+void CGameContext::InitEntities()
+{
+    // create all entities from the game layer
+    CMapItemLayerTilemap *pTileMap = m_Layers.GameLayer();
+    CTile *pTiles = (CTile *)Kernel()->RequestInterface<IMap>()->GetData(pTileMap->m_Data);
+
+    /*
+    num_spawn_points[0] = 0;
+    num_spawn_points[1] = 0;
+    num_spawn_points[2] = 0;
+    */
+
+    for(int i = 0; i < 5; i++)
+    {
+        for(int n = 0; n < 64; n++)
+            m_pController->m_aaSpawnPoints[i][n] = vec2(0, 0);
+        m_pController->m_aNumSpawnPoints[i] = 0;
+    }
+
+
+    for(int y = 0; y < pTileMap->m_Height; y++)
+    {
+        for(int x = 0; x < pTileMap->m_Width; x++)
+        {
+            int Index = pTiles[y*pTileMap->m_Width+x].m_Index;
+
+            if(Index >= ENTITY_OFFSET)
+            {
+                vec2 Pos(x*32.0f+16.0f, y*32.0f+16.0f);
+                m_pController->OnEntity(Index-ENTITY_OFFSET, Pos);
+            }
+        }
+    }
 }
 
 void CGameContext::OnShutdown()

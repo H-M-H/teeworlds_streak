@@ -125,6 +125,15 @@ public:
 	*/
 	void DestroyEntity(CEntity *pEntity);
 
+    /*
+        Function: destroy_entities_type
+           Destroys all entities of specified Type
+
+        Arguments:
+            Type - specifies the Type
+    */
+     void DestroyEntitiesType(int Type);
+
 	/*
 		Function: snap
 			Calls snap on all the entities in the world to create

@@ -484,6 +484,12 @@ bool CCharacter::GiveWeapon(int Weapon, int Ammo)
 	return false;
 }
 
+void CCharacter::RemoveWeapon(int Weapon)
+{
+    m_aWeapons[Weapon].m_Got = false;
+    m_aWeapons[Weapon].m_Ammo = 0;
+}
+
 void CCharacter::GiveNinja()
 {
 	m_Ninja.m_ActivationTick = Server()->Tick();
@@ -724,12 +730,63 @@ void CCharacter::Die(int Killer, int Weapon)
 	GameServer()->CreateDeath(m_Pos, m_pPlayer->GetCID());
 }
 
+void CCharacter::ForceRespawn()
+{
+    // we got to wait 0.5 secs before respawning
+    m_pPlayer->m_RespawnTick = Server()->Tick()+Server()->TickSpeed()/2;
+
+    // this is for auto respawn after 3 secs
+    m_pPlayer->m_DieTick = Server()->Tick();
+
+    m_Alive = false;
+    GameServer()->m_World.RemoveEntity(this);
+    GameServer()->m_World.m_Core.m_apCharacters[m_pPlayer->GetCID()] = 0;
+}
+
 bool CCharacter::TakeDamage(vec2 Force, int Dmg, int From, int Weapon)
 {
-	m_Core.m_Vel += Force;
+    m_Core.m_Vel += Force;
 
-	if(GameServer()->m_pController->IsFriendlyFire(m_pPlayer->GetCID(), From) && !g_Config.m_SvTeamdamage)
-		return false;
+    bool Insta = false;
+    bool grenade = false;
+
+    if(str_comp(GameServer()->m_pController->m_pGameType, "gStreak") == 0)
+        grenade = true;
+    else if(str_comp(GameServer()->m_pController->m_pGameType, "iStreak") == 0)
+        Insta = true;
+
+    if((grenade && Weapon != WEAPON_GRENADE) || (Insta && Weapon != WEAPON_RIFLE))
+        return false;
+
+    if(grenade && Dmg < g_Config.m_SvGrenadeMinDamage)
+        return false;
+
+    if(Insta && g_Config.m_SvExplosiveLaser && Dmg < g_Config.m_SvLaserMinDamage && (Force.x || Force.y))
+        return false;
+
+    if((grenade || Insta) && From == m_pPlayer->GetCID())
+        return false;
+
+    if(GameServer()->m_pController->IsFriendlyFire(m_pPlayer->GetCID(), From) && !g_Config.m_SvTeamdamage)
+        return false;
+
+    // do damage Hit sound
+    if(From >= 0 && From != m_pPlayer->GetCID() && GameServer()->m_apPlayers[From])
+    {
+        int Mask = CmaskOne(From);
+        for(int i = 0; i < MAX_CLIENTS; i++)
+        {
+            if(GameServer()->m_apPlayers[i] && GameServer()->m_apPlayers[i]->GetTeam() == TEAM_SPECTATORS && GameServer()->m_apPlayers[i]->m_SpectatorID == From)
+                Mask |= CmaskOne(i);
+        }
+        GameServer()->CreateSound(GameServer()->m_apPlayers[From]->m_ViewPos, SOUND_HIT, Mask);
+    }
+
+    if(grenade || Insta)
+    {
+        Die(From, Weapon);
+        return false;
+    }
 
 	// m_pPlayer only inflicts half damage on self
 	if(From == m_pPlayer->GetCID())
@@ -775,18 +832,6 @@ bool CCharacter::TakeDamage(vec2 Force, int Dmg, int From, int Weapon)
 	}
 
 	m_DamageTakenTick = Server()->Tick();
-
-	// do damage Hit sound
-	if(From >= 0 && From != m_pPlayer->GetCID() && GameServer()->m_apPlayers[From])
-	{
-		int Mask = CmaskOne(From);
-		for(int i = 0; i < MAX_CLIENTS; i++)
-		{
-			if(GameServer()->m_apPlayers[i] && GameServer()->m_apPlayers[i]->GetTeam() == TEAM_SPECTATORS && GameServer()->m_apPlayers[i]->m_SpectatorID == From)
-				Mask |= CmaskOne(i);
-		}
-		GameServer()->CreateSound(GameServer()->m_apPlayers[From]->m_ViewPos, SOUND_HIT, Mask);
-	}
 
 	// check for death
 	if(m_Health <= 0)

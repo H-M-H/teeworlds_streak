@@ -92,7 +92,7 @@ void IGameController::EvaluateSpawnType(CSpawnEval *pEval, int Type)
 	}
 }
 
-bool IGameController::CanSpawn(int Team, vec2 *pOutPos)
+bool IGameController::CanSpawn(int Team, vec2 *pOutPos, int Level)
 {
 	CSpawnEval Eval;
 

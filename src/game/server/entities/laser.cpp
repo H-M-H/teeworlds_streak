@@ -1,5 +1,7 @@
 /* (c) Magnus Auvinen. See licence.txt in the root of the distribution for more information. */
 /* If you are missing that file, acquire a complete release at teeworlds.com.                */
+#include <engine/shared/config.h>
+
 #include <game/generated/protocol.h>
 #include <game/server/gamecontext.h>
 #include "laser.h"
@@ -67,6 +69,9 @@ void CLaser::DoBounce()
 				m_Energy = -1;
 
 			GameServer()->CreateSound(m_Pos, SOUND_RIFLE_BOUNCE);
+
+            if(g_Config.m_SvExplosiveLaser && str_comp(GameServer()->m_pController->m_pGameType, "iStreak") == 0)
+                GameServer()->CreateExplosion(m_Pos, m_Owner, WEAPON_RIFLE, 0);
 		}
 	}
 	else

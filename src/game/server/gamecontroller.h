@@ -12,9 +12,6 @@
 */
 class IGameController
 {
-	vec2 m_aaSpawnPoints[3][64];
-	int m_aNumSpawnPoints[3];
-
 	class CGameContext *m_pGameServer;
 	class IServer *m_pServer;
 
@@ -62,6 +59,10 @@ protected:
 
 public:
 	const char *m_pGameType;
+
+    // we have 5 spawntypes now
+    vec2 m_aaSpawnPoints[5][64];
+    int m_aNumSpawnPoints[5];
 
 	bool IsTeamplay() const;
 	bool IsGameOver() const { return m_GameOverTick != -1; }
@@ -129,7 +130,7 @@ public:
 	virtual void OnPlayerInfoChange(class CPlayer *pP);
 
 	//
-	virtual bool CanSpawn(int Team, vec2 *pPos);
+    virtual bool CanSpawn(int Team, vec2 *pPos, int Level = 1);
 
 	/*
 

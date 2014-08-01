@@ -150,6 +150,8 @@ public:
 	//
 	void SwapTeams();
 
+    void InitEntities(); // required for dynamically reloading entities
+
 	// engine events
 	virtual void OnInit();
 	virtual void OnConsoleInit();

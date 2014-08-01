@@ -13,7 +13,7 @@ CPickup::CPickup(CGameWorld *pGameWorld, int Type, int SubType)
 
 	Reset();
 
-	GameWorld()->InsertEntity(this);
+    GameWorld()->InsertEntity(this);
 }
 
 void CPickup::Reset()

@@ -147,6 +147,17 @@ void CGameWorld::RemoveEntities()
 		}
 }
 
+void CGameWorld::DestroyEntitiesType(int Type)
+{
+    for(CEntity *pEnt = m_apFirstEntityTypes[Type]; pEnt; )
+    {
+        m_pNextTraverseEntity = pEnt->m_pNextTypeEntity;
+        RemoveEntity(pEnt);
+        pEnt->Destroy();
+        pEnt = m_pNextTraverseEntity;
+    }
+}
+
 void CGameWorld::Tick()
 {
 	if(m_ResetRequested)

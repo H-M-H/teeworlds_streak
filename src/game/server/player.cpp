@@ -16,6 +16,8 @@ CPlayer::CPlayer(CGameContext *pGameServer, int ClientID, int Team)
 	m_DieTick = Server()->Tick();
 	m_ScoreStartTick = Server()->Tick();
 	m_pCharacter = 0;
+    m_Level = 1;
+    m_Streak = 0;
 	m_ClientID = ClientID;
 	m_Team = GameServer()->m_pController->ClampTeam(Team);
 	m_SpectatorID = SPEC_FREEVIEW;
@@ -282,7 +284,7 @@ void CPlayer::TryRespawn()
 {
 	vec2 SpawnPos;
 
-	if(!GameServer()->m_pController->CanSpawn(m_Team, &SpawnPos))
+    if(!GameServer()->m_pController->CanSpawn(m_Team, &SpawnPos, m_Level))
 		return;
 
 	m_Spawning = false;
