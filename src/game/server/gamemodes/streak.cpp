@@ -75,11 +75,14 @@ void CGameControllerStreak::Tick()
     {
         if(GameServer()->m_apPlayers[i] && GameServer()->m_apPlayers[i]->GetCharacter())
         {
+            // check players ingame and handle maxsensfullevel changes
             if(GameServer()->m_apPlayers[i]->m_Level > m_MaxSensfulLevel)
                 LevelDown(GameServer()->m_apPlayers[i], true);
             else if(GameServer()->m_apPlayers[i]->m_Level < m_MaxSensfulLevel && GameServer()->m_apPlayers[i]->m_Streak >= g_Config.m_SvStreakLen)
                 LevelUp(GameServer()->m_apPlayers[i], true);
 
+            // handle waiting for enemies in same arena
+            if(g_Config.m_SvWaitFirstArena)
             if((GameServer()->m_apPlayers[i]->m_Arena != GameServer()->m_apPlayers[i]->m_WantedArena && m_ArenaPlayerNum[GameServer()->m_apPlayers[i]->m_WantedArena] > 1) ||
                     (GameServer()->m_apPlayers[i]->m_Arena == GameServer()->m_apPlayers[i]->m_WantedArena && m_ArenaPlayerNum[GameServer()->m_apPlayers[i]->m_WantedArena] <= 1 && GameServer()->m_apPlayers[i]->m_WantedArena != GetWantedArena(1)))
             {
@@ -98,7 +101,7 @@ bool CGameControllerStreak::CanSpawn(int Team, vec2 *pOutPos, int Level, int ID)
         return false;
 
     int Arena = GetWantedArena(Level);
-    if(m_ArenaPlayerNum[Arena] > 1)
+    if(m_ArenaPlayerNum[Arena] > 1 || !g_Config.m_SvWaitFirstArena)
     {
         EvaluateSpawnType(&Eval, Arena);
         if(Eval.m_Got)
@@ -109,6 +112,11 @@ bool CGameControllerStreak::CanSpawn(int Team, vec2 *pOutPos, int Level, int ID)
         EvaluateSpawnType(&Eval, GetWantedArena(1));
         if(Eval.m_Got)
             GameServer()->m_apPlayers[ID]->m_Arena = GetWantedArena(1);
+    }
+
+    if(g_Config.m_SvWaitFirstArena && GameServer()->m_apPlayers[ID]->m_Arena != GameServer()->m_apPlayers[ID]->m_WantedArena)
+    {
+        GameServer()->SendChatTarget(ID, "Waiting in first arena until enemies reach your arena");
     }
 
     *pOutPos = Eval.m_Pos;
@@ -384,7 +392,6 @@ void CGameControllerStreak::LevelDown(class CPlayer* pP, bool Game)
     else
         pP->m_Streak += g_Config.m_SvStreakLen;
 
-
     if(pP->GetCharacter() && Game)
         pP->GetCharacter()->ForceRespawn();
     OnPlayerInfoChange(pP);
@@ -462,7 +469,6 @@ void CGameControllerStreak::SetWeaponsAll(int Weapon, int Ammo)
         }
     }
 }
-
 
 void CGameControllerStreak::RemoveAllPickups()
 {

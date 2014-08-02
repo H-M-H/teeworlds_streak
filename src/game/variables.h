@@ -73,6 +73,7 @@ MACRO_CONFIG_INT(SvRespawnDelayTDM, sv_respawn_delay_tdm, 3, 0, 10, CFGFLAG_SERV
 
 MACRO_CONFIG_INT(SvStreakLen, sv_streak_length, 3, 1, 20, CFGFLAG_SERVER, "Length of Killstreak required for next level")
 MACRO_CONFIG_INT(SvLevelLose, sv_level_lose, 1, 0, 5, CFGFLAG_SERVER, "How many level you lose if you die")
+MACRO_CONFIG_INT(SvWaitFirstArena, sv_wait_first_arena, 1, 0, 1, CFGFLAG_SERVER, "Wether you wait in first arena for enemies in your arena")
 MACRO_CONFIG_INT(SvEndOnLevel, sv_win_on_maxlevel, 1, 0, 1, CFGFLAG_SERVER, "Wether the game ends if somebody reached the highest level")
 MACRO_CONFIG_INT(SvColors, sv_colors, 1, 0, 1, CFGFLAG_SERVER, "Colorize tees from different levels")
 MACRO_CONFIG_INT(SvExplosiveLaser, sv_explosive_laser, 0, 0, 1, CFGFLAG_SERVER, "Wether laser explodes in insta mode (iStreak)")
