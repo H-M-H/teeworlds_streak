@@ -735,7 +735,8 @@ void CCharacter::ForceRespawn()
     // we got to wait 0.5 secs before respawning
     m_pPlayer->m_RespawnTick = Server()->Tick()+Server()->TickSpeed()/2;
 
-    // this is for auto respawn after 3 secs
+    // this is for auto respawn after 1 sec
+    m_pPlayer->m_FastRespawn = true;
     m_pPlayer->m_DieTick = Server()->Tick();
 
     m_Alive = false;

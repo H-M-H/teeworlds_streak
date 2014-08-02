@@ -83,16 +83,23 @@ void CGameControllerStreak::Tick()
 
             // handle waiting for enemies in same arena
             if(g_Config.m_SvWaitFirstArena)
-            if((GameServer()->m_apPlayers[i]->m_Arena != GameServer()->m_apPlayers[i]->m_WantedArena && m_ArenaPlayerNum[GameServer()->m_apPlayers[i]->m_WantedArena] > 1) ||
-                    (GameServer()->m_apPlayers[i]->m_Arena == GameServer()->m_apPlayers[i]->m_WantedArena && m_ArenaPlayerNum[GameServer()->m_apPlayers[i]->m_WantedArena] <= 1 && GameServer()->m_apPlayers[i]->m_WantedArena != GetWantedArena(1)))
             {
-                GameServer()->m_apPlayers[i]->GetCharacter()->ForceRespawn();
+                // waiting but another player reached same arena
+                if((GameServer()->m_apPlayers[i]->m_Waiting && m_ArenaPlayerNum[GameServer()->m_apPlayers[i]->m_WantedArena] > 1) ||
+                // not waiting but arena out of enemies
+                    (!GameServer()->m_apPlayers[i]->m_Waiting && m_ArenaPlayerNum[GameServer()->m_apPlayers[i]->m_WantedArena] <= 1 && GameServer()->m_apPlayers[i]->m_WantedArena != GetWantedArena(1)))
+                {
+                    GameServer()->m_apPlayers[i]->GetCharacter()->ForceRespawn();
+                }
             }
+            // waiting but waiting turned off --> respawn
+            else if(GameServer()->m_apPlayers[i]->m_Waiting)
+                GameServer()->m_apPlayers[i]->GetCharacter()->ForceRespawn();
         }
     }
 }
 
-bool CGameControllerStreak::CanSpawn(int Team, vec2 *pOutPos, int Level, int ID)
+bool CGameControllerStreak::CanSpawn(int Team, vec2 *pOutPos, int ID)
 {
     CSpawnEval Eval;
 
@@ -100,23 +107,24 @@ bool CGameControllerStreak::CanSpawn(int Team, vec2 *pOutPos, int Level, int ID)
     if(Team == TEAM_SPECTATORS)
         return false;
 
-    int Arena = GetWantedArena(Level);
+    int Arena = GetWantedArena(GameServer()->m_apPlayers[ID]->m_Level);
     if(m_ArenaPlayerNum[Arena] > 1 || !g_Config.m_SvWaitFirstArena)
     {
         EvaluateSpawnType(&Eval, Arena);
         if(Eval.m_Got)
-                GameServer()->m_apPlayers[ID]->m_Arena = Arena;
+            GameServer()->m_apPlayers[ID]->m_Arena = Arena;
     }
     else
     {
         EvaluateSpawnType(&Eval, GetWantedArena(1));
         if(Eval.m_Got)
+        {
             GameServer()->m_apPlayers[ID]->m_Arena = GetWantedArena(1);
-    }
 
-    if(g_Config.m_SvWaitFirstArena && GameServer()->m_apPlayers[ID]->m_Arena != GameServer()->m_apPlayers[ID]->m_WantedArena)
-    {
-        GameServer()->SendChatTarget(ID, "Waiting in first arena until enemies reach your arena");
+            // send message if player is not waiting yet
+            if(m_ArenaPlayerNum[GetWantedArena(1)] > 1 && !GameServer()->m_apPlayers[ID]->m_Waiting)
+                GameServer()->SendChatTarget(ID, "Waiting in first arena until enemies reach your arena");
+        }
     }
 
     *pOutPos = Eval.m_Pos;
@@ -255,14 +263,12 @@ void CGameControllerStreak::OnCharacterSpawn(class CCharacter *pChr)
         pChr->GiveWeapon(WEAPON_HAMMER, -1);
         pChr->GiveWeapon(WEAPON_GUN, 10);
     }
+
+    pChr->GetPlayer()->m_Waiting = pChr->GetPlayer()->m_WantedArena != pChr->GetPlayer()->m_Arena;
 }
 
 int CGameControllerStreak::OnCharacterDeath(class CCharacter *pVictim, class CPlayer *pKiller, int Weapon)
 {
-    // level down for Victim
-    if(Weapon != WEAPON_GAME && (pVictim->GetPlayer()->m_Arena == pVictim->GetPlayer()->m_WantedArena || pKiller == pVictim->GetPlayer()))
-        LevelDown(pVictim->GetPlayer());
-
     // do scoreing
     if(!pKiller || Weapon == WEAPON_GAME)
         return 0;
@@ -273,24 +279,33 @@ int CGameControllerStreak::OnCharacterDeath(class CCharacter *pVictim, class CPl
     }
     else
     {
-        if(IsTeamplay() && pVictim->GetPlayer()->GetTeam() == pKiller->GetTeam())
-            pKiller->m_Score--; // teamkill
-        else
+        if(pKiller->m_Arena == pKiller->m_WantedArena && pKiller->m_Level == pVictim->GetPlayer()->m_Level)
         {
-            if(pKiller->m_Arena == pKiller->m_WantedArena)
-            {
-                pKiller->m_Score += pKiller->m_Level; // normal kill
-                pKiller->m_Streak++;
-            }
-            else
-                pKiller->m_Score++; // don't give waiting players such a huge advantage
-
-            if(pKiller->m_Level < m_MaxSensfulLevel && pKiller->m_Streak >= g_Config.m_SvStreakLen)
-                LevelUp(pKiller);
+            pKiller->m_Score += pKiller->m_Level; // normal kill
+            pKiller->m_Streak++;
         }
+        else if(pVictim->GetPlayer()->m_Arena == pVictim->GetPlayer()->m_WantedArena)
+        {
+            pKiller->m_Score += pVictim->GetPlayer()->m_Level; // killer died but had a projectile that killed his killer
+        }
+        else if(pVictim->GetPlayer()->m_Arena != pVictim->GetPlayer()->m_WantedArena)
+        {
+            pKiller->m_Score++; // Killer killed player with higher level
+            pKiller->m_Streak++;
+        }
+        else
+            pKiller->m_Score++; // Killer is from a higher level - don't give waiting players such a huge advantage
+
+        if(pKiller->m_Level < m_MaxSensfulLevel && pKiller->m_Streak >= g_Config.m_SvStreakLen)
+            LevelUp(pKiller);
     }
     if(Weapon == WEAPON_SELF)
         pVictim->GetPlayer()->m_RespawnTick = Server()->Tick()+Server()->TickSpeed()*3.0f;
+
+    // level down for Victim
+    if(Weapon != WEAPON_GAME && (pVictim->GetPlayer()->m_Arena == pVictim->GetPlayer()->m_WantedArena || pKiller == pVictim->GetPlayer()))
+        LevelDown(pVictim->GetPlayer());
+
     return 0;
 }
 

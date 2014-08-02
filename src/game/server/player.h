@@ -74,6 +74,9 @@ public:
 
 	int m_RespawnTick;
 	int m_DieTick;
+
+    // this is used to keep spawntimes for forced respawn low
+    bool m_FastRespawn;
 	int m_Score;
 	int m_ScoreStartTick;
 	bool m_ForceBalanced;
@@ -100,6 +103,7 @@ public:
     int m_Streak;
     int m_Arena;
     int m_WantedArena;
+    bool m_Waiting;
 
 private:
 	CCharacter *m_pCharacter;

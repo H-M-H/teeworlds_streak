@@ -20,6 +20,8 @@ CPlayer::CPlayer(CGameContext *pGameServer, int ClientID, int Team)
     m_Streak = 0;
     m_Arena = 0;
     m_WantedArena = 0;
+    m_FastRespawn = false;
+    m_Waiting = false;
 	m_ClientID = ClientID;
 	m_Team = GameServer()->m_pController->ClampTeam(Team);
 	m_SpectatorID = SPEC_FREEVIEW;
@@ -69,8 +71,11 @@ void CPlayer::Tick()
 		if(!m_pCharacter && m_Team == TEAM_SPECTATORS && m_SpectatorID == SPEC_FREEVIEW)
 			m_ViewPos -= vec2(clamp(m_ViewPos.x-m_LatestActivity.m_TargetX, -500.0f, 500.0f), clamp(m_ViewPos.y-m_LatestActivity.m_TargetY, -400.0f, 400.0f));
 
-		if(!m_pCharacter && m_DieTick+Server()->TickSpeed()*3 <= Server()->Tick())
+        if(!m_pCharacter && ((m_DieTick+Server()->TickSpeed()*3 <= Server()->Tick()) || (m_FastRespawn && m_DieTick+Server()->TickSpeed() <= Server()->Tick())))
+        {
 			m_Spawning = true;
+            m_FastRespawn = false;
+        }
 
 		if(m_pCharacter)
 		{
@@ -286,7 +291,7 @@ void CPlayer::TryRespawn()
 {
 	vec2 SpawnPos;
 
-    if(!GameServer()->m_pController->CanSpawn(m_Team, &SpawnPos, m_Level, m_ClientID))
+    if(!GameServer()->m_pController->CanSpawn(m_Team, &SpawnPos, m_ClientID))
 		return;
 
 	m_Spawning = false;

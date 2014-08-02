@@ -15,7 +15,7 @@ class CGameControllerStreak : public IGameController
 public:
     CGameControllerStreak(class CGameContext *pGameServer);
     void Tick();
-    bool CanSpawn(int Team, vec2 *pOutPos, int Level, int ID);
+    bool CanSpawn(int Team, vec2 *pOutPos, int ID);
     bool OnEntity(int Index, vec2 Pos);
     void PostReset();
     void OnPlayerInfoChange(class CPlayer *pP);
