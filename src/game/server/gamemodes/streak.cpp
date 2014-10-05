@@ -31,72 +31,35 @@ CGameControllerStreak::CGameControllerStreak(class CGameContext *pGameServer)
     for(int i = 0; i < 5; i++)
     {
         m_Spawntypes[i] = false;
-        m_ArenaPlayerNum[i] = 0;
+        m_aWantedArenaPlayers[i] = 0;
     }
-    m_MaxLevels = 0;
+    m_MaxArenas = 0;
     m_MaxSensfulLevel = 1;
+
+    m_UseArenas = g_Config.m_SvUseArenas;
 }
 
 void CGameControllerStreak::Tick()
 {
     IGameController::Tick();
 
-    int SubMode;
+    CheckSubMode();
 
-    if(str_comp_nocase(g_Config.m_SvGametype, "Streak") == 0)
-        SubMode = SUBMODE_VANILLA;
-    else if(str_comp_nocase(g_Config.m_SvGametype, "gStreak") == 0)
-        SubMode = SUBMODE_GRENADE;
-    else if(str_comp_nocase(g_Config.m_SvGametype, "iStreak") == 0)
-        SubMode = SUBMODE_INSTA;
-    else
-        SubMode = m_SubMode;
+    ReFreshPlayerStats();
 
-    ChangeSubMode(SubMode);
-
-    for(int i = 0; i < 5; i++)
-        m_ArenaPlayerNum[i] = 0;
-
-    int NumPlayersPlaying = 0;
-    for(int i = 0; i < MAX_CLIENTS; i++)
+    if(m_UseArenas != g_Config.m_SvUseArenas)
     {
-        if(GameServer()->m_apPlayers[i] && GameServer()->m_apPlayers[i]->GetTeam() != TEAM_SPECTATORS)
+        m_UseArenas = g_Config.m_SvUseArenas;
+        for(int i = 0; i < MAX_CLIENTS; i++)
         {
-            NumPlayersPlaying++;
-
-            int Arena = GetWantedArena(GameServer()->m_apPlayers[i]->m_Level);
-            m_ArenaPlayerNum[Arena]++;
-            GameServer()->m_apPlayers[i]->m_WantedArena = Arena;
-        }
-    }
-    m_MaxSensfulLevel = clamp((NumPlayersPlaying+1)/2, 1, m_MaxLevels);
-
-    for(int i = 0; i < MAX_CLIENTS; i++)
-    {
-        if(GameServer()->m_apPlayers[i] && GameServer()->m_apPlayers[i]->GetCharacter())
-        {
-            // check players ingame and handle maxsensfullevel changes
-            if(GameServer()->m_apPlayers[i]->m_Level > m_MaxSensfulLevel)
-                LevelDown(GameServer()->m_apPlayers[i], true);
-            else if(GameServer()->m_apPlayers[i]->m_Level < m_MaxSensfulLevel && GameServer()->m_apPlayers[i]->m_Streak >= g_Config.m_SvStreakLen)
-                LevelUp(GameServer()->m_apPlayers[i], true);
-
-            // handle waiting for enemies in same arena
-            if(g_Config.m_SvWaitFirstArena)
-            {
-                // waiting but another player reached same arena
-                if((GameServer()->m_apPlayers[i]->m_Waiting && m_ArenaPlayerNum[GameServer()->m_apPlayers[i]->m_WantedArena] > 1) ||
-                // not waiting but arena out of enemies
-                    (!GameServer()->m_apPlayers[i]->m_Waiting && m_ArenaPlayerNum[GameServer()->m_apPlayers[i]->m_WantedArena] <= 1 && GameServer()->m_apPlayers[i]->m_WantedArena != GetWantedArena(1)))
-                {
-                    GameServer()->m_apPlayers[i]->GetCharacter()->ForceRespawn();
-                }
-            }
-            // waiting but waiting turned off --> respawn
-            else if(GameServer()->m_apPlayers[i]->m_Waiting)
+            if(GameServer()->m_apPlayers[i] && GameServer()->m_apPlayers[i]->GetCharacter())
                 GameServer()->m_apPlayers[i]->GetCharacter()->ForceRespawn();
         }
     }
+
+    HandlePlayerNumChanges();
+
+    HandleWaiting();
 }
 
 bool CGameControllerStreak::CanSpawn(int Team, vec2 *pOutPos, int ID)
@@ -107,28 +70,45 @@ bool CGameControllerStreak::CanSpawn(int Team, vec2 *pOutPos, int ID)
     if(Team == TEAM_SPECTATORS)
         return false;
 
-    int Arena = GetWantedArena(GameServer()->m_apPlayers[ID]->m_Level);
-    if(m_ArenaPlayerNum[Arena] > 1 || !g_Config.m_SvWaitFirstArena)
+    if(g_Config.m_SvUseArenas)
     {
-        EvaluateSpawnType(&Eval, Arena);
-        if(Eval.m_Got)
-            GameServer()->m_apPlayers[ID]->m_Arena = Arena;
+        int Arena = GetWantedArena(GameServer()->m_apPlayers[ID]->m_Level);
+        if(m_aWantedArenaPlayers[Arena] > 1 || !g_Config.m_SvWaitFirstArena)
+        {
+            EvaluateSpawnType(&Eval, Arena);
+            if(Eval.m_Got)
+                GameServer()->m_apPlayers[ID]->m_Arena = Arena;
+        }
+        else
+        {
+            EvaluateSpawnType(&Eval, GetWantedArena(1));
+            if(Eval.m_Got)
+            {
+                GameServer()->m_apPlayers[ID]->m_Arena = GetWantedArena(1);
+
+                // send message if player is not waiting yet
+                if(m_aWantedArenaPlayers[GetWantedArena(1)] > 1 && !GameServer()->m_apPlayers[ID]->m_Waiting)
+                    GameServer()->SendChatTarget(ID, "Waiting in first arena until enemies reach your arena");
+            }
+        }
+        *pOutPos = Eval.m_Pos;
+        return Eval.m_Got;
     }
     else
     {
-        EvaluateSpawnType(&Eval, GetWantedArena(1));
+        EvaluateSpawnType(&Eval, 0);
         if(Eval.m_Got)
-        {
-            GameServer()->m_apPlayers[ID]->m_Arena = GetWantedArena(1);
+            GameServer()->m_apPlayers[ID]->m_Arena = 0;
+        EvaluateSpawnType(&Eval, 1);
+        if(Eval.m_Got)
+            GameServer()->m_apPlayers[ID]->m_Arena = 1;
+        EvaluateSpawnType(&Eval, 2);
+        if(Eval.m_Got)
+            GameServer()->m_apPlayers[ID]->m_Arena = 2;
 
-            // send message if player is not waiting yet
-            if(m_ArenaPlayerNum[GetWantedArena(1)] > 1 && !GameServer()->m_apPlayers[ID]->m_Waiting)
-                GameServer()->SendChatTarget(ID, "Waiting in first arena until enemies reach your arena");
-        }
+        *pOutPos = Eval.m_Pos;
+        return Eval.m_Got;
     }
-
-    *pOutPos = Eval.m_Pos;
-    return Eval.m_Got;
 }
 
 bool CGameControllerStreak::OnEntity(int Index, vec2 Pos)
@@ -186,9 +166,9 @@ bool CGameControllerStreak::OnEntity(int Index, vec2 Pos)
         SubType = WEAPON_NINJA;
     }
 
-    m_MaxLevels = 0;
+    m_MaxArenas = 0;
     for(int i = 0; i < 5 ; i++)
-        m_MaxLevels += m_Spawntypes[i];
+        m_MaxArenas += m_Spawntypes[i];
 
     if(m_SubMode != SUBMODE_VANILLA)
         return false;
@@ -222,17 +202,26 @@ void CGameControllerStreak::PostReset()
 
 void CGameControllerStreak::OnPlayerInfoChange(class CPlayer *pP)
 {
-    const int aLevelColors[4] = {11468544, 5242624, 2948864, 65280};
+    const int aLevelColors[6] = {11468544, 5242624, 2948864, 65280, 16777215, 0};
     if(g_Config.m_SvColors)
     {
-        if(pP->m_Level < 5)
+
+        pP->m_TeeInfos.m_UseCustomColor = 1;
+        if(pP->m_Streak >= g_Config.m_SvStreakLen && g_Config.m_SvEndOnLevel)
         {
-            pP->m_TeeInfos.m_UseCustomColor = 1;
+            pP->m_TeeInfos.m_ColorBody = aLevelColors[pP->m_Level];
+            pP->m_TeeInfos.m_ColorFeet = aLevelColors[pP->m_Level];
+        }
+        else if(pP->m_Streak + 1 >= g_Config.m_SvStreakLen)
+        {
+            pP->m_TeeInfos.m_ColorBody = aLevelColors[pP->m_Level - 1];
+            pP->m_TeeInfos.m_ColorFeet = aLevelColors[pP->m_Level];
+        }
+        else
+        {
             pP->m_TeeInfos.m_ColorBody = aLevelColors[pP->m_Level - 1];
             pP->m_TeeInfos.m_ColorFeet = aLevelColors[pP->m_Level - 1];
         }
-        else
-            pP->m_TeeInfos.m_UseCustomColor = 0;
     }
 }
 
@@ -276,25 +265,43 @@ int CGameControllerStreak::OnCharacterDeath(class CCharacter *pVictim, class CPl
     if(pKiller == pVictim->GetPlayer())
     {
         pVictim->GetPlayer()->m_Score--; // suicide
+        LevelDown(pVictim->GetPlayer());
     }
     else
     {
-        if(pKiller->m_Arena == pKiller->m_WantedArena && pKiller->m_Level == pVictim->GetPlayer()->m_Level)
+        if(g_Config.m_SvUseArenas)
         {
-            pKiller->m_Score += pKiller->m_Level; // normal kill
-            pKiller->m_Streak++;
-        }
-        else if(pVictim->GetPlayer()->m_Arena == pVictim->GetPlayer()->m_WantedArena)
-        {
-            pKiller->m_Score += pVictim->GetPlayer()->m_Level; // killer died but had a projectile that killed his killer
-        }
-        else if(pVictim->GetPlayer()->m_Arena != pVictim->GetPlayer()->m_WantedArena)
-        {
-            pKiller->m_Score++; // Killer killed player with higher level
-            pKiller->m_Streak++;
+            if(pKiller->m_Arena == pKiller->m_WantedArena && pKiller->m_Level == pVictim->GetPlayer()->m_Level)
+            {
+                pKiller->m_Score += pKiller->m_Level; // normal kill
+                pKiller->m_Streak++;
+            }
+            else if(pVictim->GetPlayer()->m_Arena == pVictim->GetPlayer()->m_WantedArena)
+            {
+                pKiller->m_Score += pVictim->GetPlayer()->m_Level; // killer died but had a projectile that killed his killer
+            }
+            else if(pVictim->GetPlayer()->m_Arena != pVictim->GetPlayer()->m_WantedArena)
+            {
+                pKiller->m_Score++; // Killer killed player with higher level
+                pKiller->m_Streak++;
+            }
+            else
+                pKiller->m_Score++; // Killer is from a higher level - don't give waiting players such a huge advantage
         }
         else
-            pKiller->m_Score++; // Killer is from a higher level - don't give waiting players such a huge advantage
+        {
+            if(pKiller->m_Level <= pVictim->GetPlayer()->m_Level) // same or lower level
+            {
+                pKiller->m_Score += pKiller->m_Level; // normal kill
+                pKiller->m_Streak++;
+            }
+            else
+               pKiller->m_Score++;
+        }
+
+        // level down for Victim
+        if((pVictim->GetPlayer()->m_Arena == pVictim->GetPlayer()->m_WantedArena && g_Config.m_SvUseArenas) || (!g_Config.m_SvUseArenas && pKiller->m_Level == pVictim->GetPlayer()->m_Level))
+            LevelDown(pVictim->GetPlayer());
 
         if(pKiller->m_Level < m_MaxSensfulLevel && pKiller->m_Streak >= g_Config.m_SvStreakLen)
             LevelUp(pKiller);
@@ -302,9 +309,8 @@ int CGameControllerStreak::OnCharacterDeath(class CCharacter *pVictim, class CPl
     if(Weapon == WEAPON_SELF)
         pVictim->GetPlayer()->m_RespawnTick = Server()->Tick()+Server()->TickSpeed()*3.0f;
 
-    // level down for Victim
-    if(Weapon != WEAPON_GAME && (pVictim->GetPlayer()->m_Arena == pVictim->GetPlayer()->m_WantedArena || pKiller == pVictim->GetPlayer()))
-        LevelDown(pVictim->GetPlayer());
+    OnPlayerInfoChange(pVictim->GetPlayer());
+    OnPlayerInfoChange(pKiller);
 
     return 0;
 }
@@ -384,7 +390,7 @@ void CGameControllerStreak::LevelUp(class CPlayer* pP, bool Game)
     }
 
 
-    if(pP->GetCharacter())
+    if(pP->GetCharacter() && g_Config.m_SvUseArenas)
         pP->GetCharacter()->ForceRespawn();
     OnPlayerInfoChange(pP);
 }
@@ -407,17 +413,28 @@ void CGameControllerStreak::LevelDown(class CPlayer* pP, bool Game)
     else
         pP->m_Streak += g_Config.m_SvStreakLen;
 
-    if(pP->GetCharacter() && Game)
+    if(pP->GetCharacter() && Game && g_Config.m_SvUseArenas)
         pP->GetCharacter()->ForceRespawn();
     OnPlayerInfoChange(pP);
 }
 
-void CGameControllerStreak::ChangeSubMode(int Mode)
+void CGameControllerStreak::CheckSubMode()
 {
-    if(Mode == m_SubMode)
+    int SubMode;
+
+    if(str_comp_nocase(g_Config.m_SvGametype, "Streak") == 0)
+        SubMode = SUBMODE_VANILLA;
+    else if(str_comp_nocase(g_Config.m_SvGametype, "gStreak") == 0)
+        SubMode = SUBMODE_GRENADE;
+    else if(str_comp_nocase(g_Config.m_SvGametype, "iStreak") == 0)
+        SubMode = SUBMODE_INSTA;
+    else
+        SubMode = m_SubMode;
+
+    if(SubMode == m_SubMode)
         return;
 
-    switch(Mode)
+    switch(SubMode)
     {
         case SUBMODE_GRENADE:
         {
@@ -450,6 +467,67 @@ void CGameControllerStreak::ChangeSubMode(int Mode)
             AdjustLivesAll();
             m_SubMode = SUBMODE_VANILLA;
             m_pGameType = "Streak";
+        }
+    }
+}
+
+void CGameControllerStreak::ReFreshPlayerStats()
+{
+    for(int i = 0; i < 5; i++)
+        m_aWantedArenaPlayers[i] = 0;
+
+    int NumPlayersPlaying = 0;
+    for(int i = 0; i < MAX_CLIENTS; i++)
+    {
+        if(GameServer()->m_apPlayers[i] && GameServer()->m_apPlayers[i]->GetTeam() != TEAM_SPECTATORS)
+        {
+            NumPlayersPlaying++;
+
+            int Arena = GetWantedArena(GameServer()->m_apPlayers[i]->m_Level);
+            m_aWantedArenaPlayers[Arena]++;
+            GameServer()->m_apPlayers[i]->m_WantedArena = Arena;
+        }
+    }
+    m_MaxSensfulLevel = clamp((NumPlayersPlaying+1)/2, 1, GetMaxLevels());
+}
+
+void CGameControllerStreak::HandlePlayerNumChanges()
+{
+    for(int i = 0; i < MAX_CLIENTS; i++)
+    {
+        if(GameServer()->m_apPlayers[i] && GameServer()->m_apPlayers[i]->GetCharacter())
+        {
+            // check players ingame and handle maxsensfullevel changes
+            if(GameServer()->m_apPlayers[i]->m_Level > m_MaxSensfulLevel)
+                LevelDown(GameServer()->m_apPlayers[i], true);
+            else if(GameServer()->m_apPlayers[i]->m_Level < m_MaxSensfulLevel && GameServer()->m_apPlayers[i]->m_Streak >= g_Config.m_SvStreakLen)
+                LevelUp(GameServer()->m_apPlayers[i], true);
+        }
+    }
+}
+
+void CGameControllerStreak::HandleWaiting()
+{
+    for(int i = 0; i < MAX_CLIENTS; i++)
+    {
+        if(GameServer()->m_apPlayers[i] && GameServer()->m_apPlayers[i]->GetCharacter() && g_Config.m_SvUseArenas)
+        {
+            // handle waiting for enemies in same arena
+            if(g_Config.m_SvWaitFirstArena)
+            {
+                // waiting but another player reached same arena
+                if((GameServer()->m_apPlayers[i]->m_Waiting && m_aWantedArenaPlayers[GameServer()->m_apPlayers[i]->m_WantedArena] > 1) ||
+                        // not waiting but arena out of enemies
+                        (!GameServer()->m_apPlayers[i]->m_Waiting // not waiting
+                         && m_aWantedArenaPlayers[GameServer()->m_apPlayers[i]->m_WantedArena] <= 1 // no players in own arena
+                         && GameServer()->m_apPlayers[i]->m_WantedArena != GetWantedArena(1))) // if arena is one no respawn
+                {
+                    GameServer()->m_apPlayers[i]->GetCharacter()->ForceRespawn();
+                }
+            }
+            // waiting but waiting turned off --> respawn
+            else if(GameServer()->m_apPlayers[i]->m_Waiting)
+                GameServer()->m_apPlayers[i]->GetCharacter()->ForceRespawn();
         }
     }
 }
@@ -507,11 +585,16 @@ int CGameControllerStreak::GetWantedArena(int Level)
     int SpawnType = -1;
     int Num = 0;
 
-    while(Num != Level && SpawnType < m_MaxLevels)
+    while(Num != Level && SpawnType < m_MaxArenas)
     {
         SpawnType++;
         if(m_Spawntypes[SpawnType])
             Num++;
     }
     return SpawnType;
+}
+
+int CGameControllerStreak::GetMaxLevels()
+{
+     return g_Config.m_SvUseArenas ? (m_MaxArenas < g_Config.m_SvMaxLevel ? m_MaxArenas : g_Config.m_SvMaxLevel) : g_Config.m_SvMaxLevel;
 }

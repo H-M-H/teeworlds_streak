@@ -6,11 +6,13 @@ class CGameControllerStreak : public IGameController
     // store which spawntypes are used (normal, red, blue, yellow, green)
     bool m_Spawntypes[5];
     // the arenas the players belong to by their level / wanted arenas
-    int m_ArenaPlayerNum[5];
-    // maximum level that can be reached on map
-    int m_MaxLevels;
+    int m_aWantedArenaPlayers[5];
+    // maximum arena that can be reached on map
+    int m_MaxArenas;
     // this depends on playernumber so there is always someone to fight against
     int m_MaxSensfulLevel;
+    //
+    bool m_UseArenas;
 
 public:
     CGameControllerStreak(class CGameContext *pGameServer);
@@ -33,14 +35,17 @@ public:
         SUBMODE_INSTA
     };
 
-    void ChangeSubMode(int Mode);
+    void CheckSubMode();
+    void ReFreshPlayerStats();
+    void HandlePlayerNumChanges();
+    void HandleWaiting();
     void SetWeaponsAll(int Weapon, int Ammo);
     void RemoveAllPickups();
     void AdjustLivesAll();
     int GetWantedArena(int Level);
 
     // getters
-    int GetMaxLevel() { return m_MaxLevels; }
+    int GetMaxLevels();
     int GetMaxSensfulLevel() { return m_MaxSensfulLevel; }
 };
 

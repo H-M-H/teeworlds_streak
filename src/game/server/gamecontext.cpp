@@ -671,14 +671,14 @@ void CGameContext::OnMessage(int MsgID, CUnpacker *pUnpacker, int ClientID)
 
                     SendChatTarget(ClientID, "The higher your Level the more score you get for Kills. The score you get is equal to your Level");
 
-                    SendChatTarget(ClientID, "Each Level has its own spawnpoints, so Tees from different Levels can be seperated.");
+                    SendChatTarget(ClientID, "Each Level can have its own spawnpoints, so Tees from different Levels can be seperated.");
                 }
                 else if(str_comp_nocase(pMsg->m_pMessage, "/gameinfo") == 0)
                 {
                     SendChatTarget(ClientID, "–––––");
 
                     char aBuf[256];
-                    str_format(aBuf, sizeof(aBuf), "The highest Level that can be reached on this Map is %d.", ((CGameControllerStreak*)m_pController)->GetMaxLevel());
+                    str_format(aBuf, sizeof(aBuf), "The highest Level that can be reached on this Map is %d.", ((CGameControllerStreak*)m_pController)->GetMaxLevels());
                     SendChatTarget(ClientID, aBuf);
 
                     str_format(aBuf, sizeof(aBuf), "The highest Level that can be reached currently is %d.", ((CGameControllerStreak*)m_pController)->GetMaxSensfulLevel());
